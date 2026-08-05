@@ -150,9 +150,6 @@ function initFilter() {
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
-  // Set global hitTolerance so native qgis2web popups use 15px hit radius on mobile
-  var clickHitTolerance = isTouchDevice ? 15 : 5;
-
   var speciesSet = new Set();
 
   // Populate dropdown options with unique species names
@@ -224,9 +221,8 @@ function initFilter() {
     filterBySpecies(this.value);
   });
 
-  // 2. Point Click Listener for Desktop & Mobile Popup Hit-Tolerance Enhancement
+  // 2. Point Click Listener (ONLY on Desktop to preserve 100% native popup behavior on mobile)
   if (!isTouchDevice) {
-    // Desktop: Highlight species on point click + reset on background click
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -243,22 +239,7 @@ function initFilter() {
           filterBySpecies(species);
         }
       } else {
-        filterBySpecies("");
-      }
-    });
-  } else {
-    // Mobile: Intercept singleclick to provide 15px touch hit tolerance for qgis2web popup
-    map.on('singleclick', function(evt) {
-      var featureFound = false;
-      map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
-        if (layer === plantLayer) {
-          featureFound = true;
-          return true;
-        }
-      }, { hitTolerance: clickHitTolerance });
-
-      // If tapping background on mobile, clear dropdown selection
-      if (!featureFound) {
+        // Reset filter and view when clicking map background
         filterBySpecies("");
       }
     });
