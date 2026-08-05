@@ -130,7 +130,6 @@
       var plantLayer = lyr_IllustratedHerbal_6; 
       var fieldName = 'scientific';
 
-
 // Highlights: radius 4.8, #7ca89d fill, no stroke
 var highlightStyle = new ol.style.Style({
   image: new ol.style.Circle({
@@ -151,7 +150,7 @@ function initFilter() {
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
-  // 50px touch radius ONLY used for nearest-neighbor snapping on mobile
+  // Maximum touch radius in SCREEN PIXELS for mobile tapping
   var MAX_TOUCH_DISTANCE_PX = 50; 
 
   var speciesSet = new Set();
@@ -220,14 +219,23 @@ function initFilter() {
     }
   }
 
-  // MOBILE ONLY Helper: Find closest plant feature strictly on plantLayer within 50px radius
-  function getNearestPlantFeatureAtPixel(pixel, maxDistancePx) {
+  // MOBILE-ONLY: Map coordinate distance search that works perfectly at ANY zoom level
+  function getNearestPlantFeatureOnMobile(clickCoordinate, maxAllowedPx) {
     var nearestFeature = null;
-    var minDistanceSq = maxDistancePx * maxDistancePx;
+    var view = map.getView();
+    
+    // Get current map resolution (map units per screen pixel at CURRENT zoom)
+    var resolution = view.getResolution(); 
+    
+    // Convert 50 screen pixels into map coordinate distance
+    var maxAllowedMapDistance = maxAllowedPx * resolution;
+    var minDistanceSq = maxAllowedMapDistance * maxAllowedMapDistance;
 
-    // Iterate exclusively over features in plantLayer's source
+    var clickX = clickCoordinate[0];
+    var clickY = clickCoordinate[1];
+
     source.forEachFeature(function(feature) {
-      // Skip hidden features (non-matching species when filtered)
+      // Skip hidden features from species filter
       if (feature.getStyle() && feature.getStyle().getImage() === null) {
         return;
       }
@@ -235,17 +243,13 @@ function initFilter() {
       var geom = feature.getGeometry();
       if (geom) {
         var coord = geom.getCoordinates();
-        var featurePixel = map.getPixelFromCoordinate(coord);
-        
-        if (featurePixel) {
-          var dx = featurePixel[0] - pixel[0];
-          var dy = featurePixel[1] - pixel[1];
-          var distSq = dx * dx + dy * dy;
+        var dx = coord[0] - clickX;
+        var dy = coord[1] - clickY;
+        var distSq = dx * dx + dy * dy;
 
-          if (distSq < minDistanceSq) {
-            minDistanceSq = distSq;
-            nearestFeature = feature;
-          }
+        if (distSq < minDistanceSq) {
+          minDistanceSq = distSq;
+          nearestFeature = feature;
         }
       }
     });
@@ -260,7 +264,7 @@ function initFilter() {
 
   // 2. Map Tap / Click Listener
   if (!isTouchDevice) {
-    // DESKTOP: Exact pixel match strictly on plantLayer
+    // DESKTOP: Standard pixel detection
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -281,12 +285,15 @@ function initFilter() {
       }
     });
   } else {
-    // MOBILE ONLY: Tap detection locked exclusively to plantLayer features
+    // MOBILE ONLY: Tap detection using map coordinates & current zoom resolution
     map.on('singleclick', function(evt) {
-      var nearestFeature = getNearestPlantFeatureAtPixel(evt.pixel, MAX_TOUCH_DISTANCE_PX);
+      // Force viewport size update to prevent post-zoom pinch matrix drift
+      map.updateSize();
+
+      var nearestFeature = getNearestPlantFeatureOnMobile(evt.coordinate, MAX_TOUCH_DISTANCE_PX);
 
       if (nearestFeature) {
-        // Trigger qgis2web default popup strictly for the nearest plant feature
+        // Trigger qgis2web default popup at feature location
         if (typeof createPopup === 'function') {
           var featureCoord = nearestFeature.getGeometry().getCoordinates();
           createPopup(featureCoord, nearestFeature);
