@@ -562,7 +562,7 @@ var bottomRightContainerDiv = document.getElementById('bottom-right-container')
           anchor: [0.5, 1],
           anchorXUnits: 'fraction',
           anchorYUnits: 'fraction',
-          scale: .08,
+          scale: 0.08,
           opacity: 1,
           src: "./resources/marker.png",
           zIndex: zIndex
