@@ -130,6 +130,7 @@
       var plantLayer = lyr_IllustratedHerbal_6; 
       var fieldName = 'scientific';
 
+
 // Highlights: radius 4.8, #7ca89d fill, no stroke
 var highlightStyle = new ol.style.Style({
   image: new ol.style.Circle({
@@ -219,12 +220,18 @@ function initFilter() {
     }
   }
 
-  // Helper function for mobile ONLY: find closest feature within maximum 50px radius
-  function getNearestFeatureAtPixel(pixel, maxDistancePx) {
+  // MOBILE ONLY Helper: Find closest plant feature strictly on plantLayer within 50px radius
+  function getNearestPlantFeatureAtPixel(pixel, maxDistancePx) {
     var nearestFeature = null;
     var minDistanceSq = maxDistancePx * maxDistancePx;
 
+    // Iterate exclusively over features in plantLayer's source
     source.forEachFeature(function(feature) {
+      // Skip hidden features (non-matching species when filtered)
+      if (feature.getStyle() && feature.getStyle().getImage() === null) {
+        return;
+      }
+
       var geom = feature.getGeometry();
       if (geom) {
         var coord = geom.getCoordinates();
@@ -253,7 +260,7 @@ function initFilter() {
 
   // 2. Map Tap / Click Listener
   if (!isTouchDevice) {
-    // DESKTOP: Exact pixel match. Click point to highlight species + reset on background click
+    // DESKTOP: Exact pixel match strictly on plantLayer
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -274,18 +281,18 @@ function initFilter() {
       }
     });
   } else {
-    // MOBILE ONLY: 50px nearest-neighbor radius to trigger popups easily at any zoom level
+    // MOBILE ONLY: Tap detection locked exclusively to plantLayer features
     map.on('singleclick', function(evt) {
-      var nearestFeature = getNearestFeatureAtPixel(evt.pixel, MAX_TOUCH_DISTANCE_PX);
+      var nearestFeature = getNearestPlantFeatureAtPixel(evt.pixel, MAX_TOUCH_DISTANCE_PX);
 
       if (nearestFeature) {
-        // Trigger qgis2web default popup at feature location
+        // Trigger qgis2web default popup strictly for the nearest plant feature
         if (typeof createPopup === 'function') {
           var featureCoord = nearestFeature.getGeometry().getCoordinates();
           createPopup(featureCoord, nearestFeature);
         }
       } else {
-        // Clear selection if tap is far away from all points
+        // Clear popup and reset filter when tapping empty space
         if (typeof container !== 'undefined' && container) {
           var overlay = map.getOverlayById ? map.getOverlayById('popup') : null;
           if (overlay) overlay.setPosition(undefined);
