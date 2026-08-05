@@ -42,6 +42,46 @@
             padding: 0;
             margin: 0;
         }
+        
+  /* Filter Container Styles */
+  #filter-container {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      color: #7ca89d;
+      font-family: sans-serif;
+  }
+
+  #speciesSelect {
+      color: #7ca89d;
+      font-size: 14px;
+      padding: 4px;
+      border-radius: 4px;
+      border: 1px solid #7ca89d;
+      background-color: #fff;
+  }
+
+  /* Mobile Adjustments for Phones & Tablets */
+  @media only screen and (max-width: 768px) {
+      #filter-container {
+          top: 10px;
+          left: 10px;
+          right: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+      }
+      #speciesSelect {
+          max-width: 65%;
+          font-size: 16px; /* Prevents auto-zoom on iOS inputs */
+      }
+  }
+
         </style>
         <title></title>
     </head>
@@ -74,7 +114,7 @@
             var plantLayer = lyr_IllustratedHerbal_6; 
             var fieldName = 'scientific';
 
-// Highlight style: radius 4.8, #7ca89d fill, no stroke outline
+// Highlight style: radius 4.8, #7ca89d fill, no stroke
 var highlightStyle = new ol.style.Style({
   image: new ol.style.Circle({
     radius: 4.8,
@@ -88,6 +128,14 @@ function initFilter() {
   // Capture initial view center and zoom level on page load
   var initialCenter = map.getView().getCenter();
   var initialZoom = map.getView().getZoom();
+
+  // Detect mobile device or touch capabilities (Phones, iPads, Android Tablets)
+  var isTouchDevice = ('ontouchstart' in window) || 
+                      (navigator.maxTouchPoints > 0) || 
+                      (window.innerWidth <= 1024);
+
+  // Increase hit tolerance for touch devices so finger taps hit small points easily
+  var clickHitTolerance = isTouchDevice ? 15 : 5;
 
   var speciesSet = new Set();
 
@@ -119,7 +167,7 @@ function initFilter() {
           ol.extent.extend(extent, feature.getGeometry().getExtent());
           matchCount++;
         } else {
-          feature.setStyle(null); // Reset to default style when "-- Show All --" is selected
+          feature.setStyle(null); // Reset to default style
         }
       } else {
         feature.setStyle(new ol.style.Style(null)); // Hide non-matches
@@ -130,15 +178,12 @@ function initFilter() {
       var view = map.getView();
       var size = map.getSize();
       
-      // 1. Calculate the resolution needed to fit all points
       var targetResolution = view.getResolutionForExtent(extent, size);
-      
-      // 2. Convert resolution to a zoom level
       var targetZoom = view.getZoomForResolution(targetResolution);
       
-      // 3. Cap the zoom level: zoom in if features are close, but NEVER zoom out past initialZoom
-      // Subtracting a small padding offset so points near edges aren't cut off
+      // Calculate capped zoom level
       var cappedZoom = Math.min(Math.max(targetZoom - 0.5, 0), 16);
+      // Strictly enforce that zoom level never drops below initialZoom
       cappedZoom = Math.max(cappedZoom, initialZoom);
 
       var center = ol.extent.getCenter(extent);
@@ -164,25 +209,26 @@ function initFilter() {
     filterBySpecies(this.value);
   });
 
-  // 2. Map Point / Background Click Listener
+  // 2. Touch/Click Listener with Hit Tolerance
   map.on('singleclick', function(evt) {
     var clickedFeature = null;
 
+    // hitTolerance allows finger taps near a point to register on mobile
     map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
       if (layer === plantLayer) {
         clickedFeature = feature;
         return true;
       }
-    });
+    }, { hitTolerance: clickHitTolerance });
 
     if (clickedFeature) {
-      // Clicked a plant feature: highlight all instances of that species
+      // Clicked/Tapped a plant feature: highlight all instances of that species
       var species = clickedFeature.get(fieldName);
       if (species) {
         filterBySpecies(species);
       }
     } else {
-      // Clicked empty space on map: reset filter and view back to initial state
+      // Clicked/Tapped empty space: reset filter and view back to initial state
       filterBySpecies("");
     }
   });
