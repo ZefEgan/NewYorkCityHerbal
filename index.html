@@ -130,7 +130,7 @@
       var plantLayer = lyr_IllustratedHerbal_6; 
       var fieldName = 'scientific';
 
-// Highlight style: radius 4.8, #7ca89d fill, no stroke
+// Highlights: radius 4.8, #7ca89d fill, no stroke
 var highlightStyle = new ol.style.Style({
   image: new ol.style.Circle({
     radius: 4.8,
@@ -150,8 +150,8 @@ function initFilter() {
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
-  // Maximum touch radius in pixels for nearest-point snapping on mobile
-  var MAX_TOUCH_DISTANCE_PX = 35; 
+  // 50px touch radius ONLY used for nearest-neighbor snapping on mobile
+  var MAX_TOUCH_DISTANCE_PX = 50; 
 
   var speciesSet = new Set();
 
@@ -183,7 +183,7 @@ function initFilter() {
           ol.extent.extend(extent, feature.getGeometry().getExtent());
           matchCount++;
         } else {
-          feature.setStyle(null); // Reset to default style
+          feature.setStyle(null); // Reset to base qgis2web style
         }
       } else {
         feature.setStyle(new ol.style.Style(null)); // Hide non-matches
@@ -219,7 +219,7 @@ function initFilter() {
     }
   }
 
-  // Helper function: find closest feature within a pixel radius
+  // Helper function for mobile ONLY: find closest feature within maximum 50px radius
   function getNearestFeatureAtPixel(pixel, maxDistancePx) {
     var nearestFeature = null;
     var minDistanceSq = maxDistancePx * maxDistancePx;
@@ -253,7 +253,7 @@ function initFilter() {
 
   // 2. Map Tap / Click Listener
   if (!isTouchDevice) {
-    // Desktop: Click point to highlight species + reset on background click
+    // DESKTOP: Exact pixel match. Click point to highlight species + reset on background click
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -274,7 +274,7 @@ function initFilter() {
       }
     });
   } else {
-    // Mobile: Nearest-neighbor search within 35px radius for instant, hyper-sensitive selection
+    // MOBILE ONLY: 50px nearest-neighbor radius to trigger popups easily at any zoom level
     map.on('singleclick', function(evt) {
       var nearestFeature = getNearestFeatureAtPixel(evt.pixel, MAX_TOUCH_DISTANCE_PX);
 
