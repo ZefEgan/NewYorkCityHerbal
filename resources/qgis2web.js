@@ -741,6 +741,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (zoomControl) {
         topLeftContainerDiv.appendChild(zoomControl);
     }
+    //rotate reset button
+    var rotateControl = document.getElementsByClassName('ol-rotate')[0];
+    if (rotateControl) {
+        bottomLeftContainerDiv.appendChild(rotateControl);
+    }
     //geolocate
     if (typeof geolocateControl !== 'undefined') {
         topLeftContainerDiv.appendChild(geolocateControl);
