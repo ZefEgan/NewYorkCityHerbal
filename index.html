@@ -144,12 +144,10 @@ function initFilter() {
   var initialCenter = map.getView().getCenter();
   var initialZoom = map.getView().getZoom();
 
+  // Detect mobile device / touch interface
   var isTouchDevice = ('ontouchstart' in window) || 
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
-
-  // Expanded touch target for mobile (80px radius around any tap)
-  var MOBILE_TOUCH_RADIUS_PX = 80; 
 
   var speciesSet = new Set();
 
@@ -209,41 +207,6 @@ function initFilter() {
     }
   }
 
-  // Simplified Mobile Search: Strictly scans plant features and checks pixel distance on tap
-  function getClosestPlantOnMobile(tapPixel) {
-    var closestFeature = null;
-    var minPixelDistSq = MOBILE_TOUCH_RADIUS_PX * MOBILE_TOUCH_RADIUS_PX;
-
-    // Scan ONLY plant features in the source
-    var features = source.getFeatures();
-    
-    for (var i = 0; i < features.length; i++) {
-      var feature = features[i];
-
-      // Skip hidden points when filtered
-      if (feature.getStyle() && feature.getStyle().getImage() === null) {
-        continue;
-      }
-
-      var geom = feature.getGeometry();
-      if (!geom) continue;
-
-      var pointPixel = map.getPixelFromCoordinate(geom.getCoordinates());
-      if (!pointPixel) continue; // Skip points outside rendering range
-
-      var dx = pointPixel[0] - tapPixel[0];
-      var dy = pointPixel[1] - tapPixel[1];
-      var distSq = dx * dx + dy * dy;
-
-      if (distSq < minPixelDistSq) {
-        minPixelDistSq = distSq;
-        closestFeature = feature;
-      }
-    }
-
-    return closestFeature;
-  }
-
   // 1. Dropdown Change Listener
   selectElem.addEventListener('change', function() {
     filterBySpecies(this.value);
@@ -251,7 +214,7 @@ function initFilter() {
 
   // 2. Click / Tap Listeners
   if (!isTouchDevice) {
-    // DESKTOP: Standard exact feature hit detection
+    // DESKTOP ONLY: Restrict click detection strictly to plantLayer
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -269,29 +232,8 @@ function initFilter() {
         filterBySpecies("");
       }
     });
-  } else {
-    // MOBILE ONLY: Ultra-sensitive nearest plant snap, ignoring all other layers
-    map.on('singleclick', function(evt) {
-      map.updateSize(); // Refresh canvas bounds on tap
-
-      var nearestPlant = getClosestPlantOnMobile(evt.pixel);
-
-      if (nearestPlant) {
-        // Trigger popup for nearest plant
-        if (typeof createPopup === 'function') {
-          var featureCoord = nearestPlant.getGeometry().getCoordinates();
-          createPopup(featureCoord, nearestPlant);
-        }
-      } else {
-        // Close popup and reset filter if tap is far away from all plant points
-        if (typeof container !== 'undefined' && container) {
-          var overlay = map.getOverlayById ? map.getOverlayById('popup') : null;
-          if (overlay) overlay.setPosition(undefined);
-        }
-        filterBySpecies("");
-      }
-    });
-  }
+  } 
+  // MOBILE: Do nothing here so qgis2web's native listener handles singleclick natively.
 }
 
 if (source.getState() === 'ready') {
