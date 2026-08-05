@@ -354,85 +354,64 @@ function updatePopup() {
         stopMediaInPopup();
     }
 } 
+
 function onSingleClickFeatures(evt) {
-    if (doHover) {
+    if (doHover || sketch) {
         return;
     }
-
-    var pixel = evt.pixel;
-    var coord = evt.coordinate;
-    var popupText = '';
-    var currentFeature = null;
-
-    // Detect mobile touch devices
-    var isMobile = ('ontouchstart' in window) || 
-                   (navigator.maxTouchPoints > 0) || 
-                   (window.innerWidth <= 1024);
-
-    if (isMobile) {
-        // MOBILE ONLY: Tap tolerance (15px) + strict IllustratedHerbal_6 filtering
-        map.forEachFeatureAtPixel(pixel, function(feature, layer) {
-            // Filter strictly for the updated plant layer variable
-            if (!layer || layer !== lyr_IllustratedHerbal_6) {
-                return false; // Skip non-plant layers (parks, boroughs, etc.)
-            }
-
-            currentFeature = feature;
-
-            var properties = feature.getProperties();
-            popupText = '<table>';
-            for (var key in properties) {
-                if (properties.hasOwnProperty(key) && key !== 'geometry') {
-                    popupText += '<tr><th>' + key + '</th><td>' + 
-                        (properties[key] !== null ? Autolinker.link(properties[key].toLocaleString()) : '') + 
-                        '</td></tr>';
-                }
-            }
-            popupText += '</table>';
-
-            return true; // Stop searching once a plant feature is found
-        }, {
-            hitTolerance: 15
-        });
-
-        if (currentFeature && popupText !== '<table></table>') {
-            container.style.display = 'block';
-            overlay.setPosition(coord);
-            content.innerHTML = popupText;
-        } else {
-            if (overlay) overlay.setPosition(undefined);
-            if (container) container.style.display = 'none';
-        }
-
-    } else {
-        // DESKTOP: Default qgis2web behavior untouched
-        map.forEachFeatureAtPixel(pixel, function(feature, layer) {
-            currentFeature = feature;
-            
-            var properties = feature.getProperties();
-            popupText = '<table>';
-            for (var key in properties) {
-                if (properties.hasOwnProperty(key) && key !== 'geometry') {
-                    popupText += '<tr><th>' + key + '</th><td>' + 
-                        (properties[key] !== null ? Autolinker.link(properties[key].toLocaleString()) : '') + 
-                        '</td></tr>';
-                }
-            }
-            popupText += '</table>';
-
-            return true;
-        });
-
-        if (currentFeature && popupText !== '<table></table>') {
-            container.style.display = 'block';
-            overlay.setPosition(coord);
-            content.innerHTML = popupText;
-        } else {
-            if (overlay) overlay.setPosition(undefined);
-            if (container) container.style.display = 'none';
-        }
+    if (!featuresPopupActive) {
+        featuresPopupActive = true;
     }
+    var pixel = map.getEventPixel(evt.originalEvent);
+    var coord = evt.coordinate;
+    var currentFeature;
+    var currentFeatureKeys;
+    var clusteredFeatures;
+    var popupText = '<ul>';
+    
+    map.forEachFeatureAtPixel(pixel, function(feature, layer) {
+        if (layer && feature instanceof ol.Feature && (layer.get("interactive") || layer.get("interactive") === undefined)) {
+            var doPopup = false;
+            for (var k in layer.get('fieldImages')) {
+                if (layer.get('fieldImages')[k] !== "Hidden") {
+                    doPopup = true;
+                }
+            }
+            currentFeature = feature;
+            clusteredFeatures = feature.get("features");
+            if (typeof clusteredFeatures !== "undefined") {
+                if (doPopup) {
+                    for(var n = 0; n < clusteredFeatures.length; n++) {
+                        currentFeature = clusteredFeatures[n];
+                        currentFeatureKeys = currentFeature.getKeys();
+                        popupText += '<li><table>';
+                        popupText += '<a><b>' + layer.get('popuplayertitle') + '</b></a>';
+                        popupText += createPopupField(currentFeature, currentFeatureKeys, layer);
+                        popupText += '</table></li>';    
+                    }
+                }
+            } else {
+                currentFeatureKeys = currentFeature.getKeys();
+                if (doPopup) {
+                    popupText += '<li><table>';
+                    popupText += '<a><b>' + layer.get('popuplayertitle') + '</b></a>';
+                    popupText += createPopupField(currentFeature, currentFeatureKeys, layer);
+                    popupText += '</table>';
+                }
+            }
+        }
+    });
+    if (popupText === '<ul>') {
+        popupText = '';
+    } else {
+        popupText += '</ul>';
+    }
+	
+	popupContent = popupText;
+    popupCoord = coord;
+    updatePopup();
 }
+
 function onSingleClickWMS(evt) {
     if (doHover || sketch) {
         return;
