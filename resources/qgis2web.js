@@ -356,95 +356,60 @@ function updatePopup() {
 } 
 
 function onSingleClickFeatures(evt) {
-    if (doHover) {
+    if (doHover || sketch) {
         return;
     }
-
-    var pixel = evt.pixel;
+    if (!featuresPopupActive) {
+        featuresPopupActive = true;
+    }
+    var pixel = map.getEventPixel(evt.originalEvent);
     var coord = evt.coordinate;
-    var popupText = '';
-    var currentFeature = null;
-
-    // Detect mobile touch devices or small viewports
-    var isMobile = ('ontouchstart' in window) || 
-                   (navigator.maxTouchPoints > 0) || 
-                   (window.innerWidth <= 1024);
-
-    // Helper to safely format cell content without breaking on Autolinker
-    function formatValue(val) {
-        if (val === null || val === undefined) return '';
-        var str = String(val);
-        return (typeof Autolinker !== 'undefined' && Autolinker.link) ? Autolinker.link(str) : str;
-    }
-
-    if (isMobile) {
-        // MOBILE ONLY: Apply 15px touch buffer and filter strictly for IllustratedHerbal
-        map.forEachFeatureAtPixel(pixel, function(feature, layer) {
-            if (!layer) return false;
-
-            // Fetch metadata properties safely
-            var title = String(layer.get('title') || '');
-            var name = String(layer.get('name') || '');
-
-            // Match IllustratedHerbal_6 layer title or name
-            var isHerbalLayer = title.toLowerCase().indexOf('illustratedherbal') !== -1 || 
-                                name.toLowerCase().indexOf('illustratedherbal') !== -1;
-
-            if (!isHerbalLayer) {
-                return false; // Skip background polygons, borough maps, parks, etc.
-            }
-
-            currentFeature = feature;
-
-            var properties = feature.getProperties();
-            popupText = '<table>';
-            for (var key in properties) {
-                if (properties.hasOwnProperty(key) && key !== 'geometry') {
-                    popupText += '<tr><th>' + key + '</th><td>' + formatValue(properties[key]) + '</td></tr>';
+    var currentFeature;
+    var currentFeatureKeys;
+    var clusteredFeatures;
+    var popupText = '<ul>';
+    
+    map.forEachFeatureAtPixel(pixel, function(feature, layer) {
+        if (layer && feature instanceof ol.Feature && (layer.get("interactive") || layer.get("interactive") === undefined)) {
+            var doPopup = false;
+            for (var k in layer.get('fieldImages')) {
+                if (layer.get('fieldImages')[k] !== "Hidden") {
+                    doPopup = true;
                 }
             }
-            popupText += '</table>';
-
-            return true; // Stop searching once plant feature is hit
-        }, {
-            hitTolerance: 15
-        });
-
-        if (currentFeature && popupText !== '<table></table>') {
-            container.style.display = 'block';
-            overlay.setPosition(coord);
-            content.innerHTML = popupText;
-        } else {
-            if (overlay) overlay.setPosition(undefined);
-            if (container) container.style.display = 'none';
+            currentFeature = feature;
+            clusteredFeatures = feature.get("features");
+            if (typeof clusteredFeatures !== "undefined") {
+                if (doPopup) {
+                    for(var n = 0; n < clusteredFeatures.length; n++) {
+                        currentFeature = clusteredFeatures[n];
+                        currentFeatureKeys = currentFeature.getKeys();
+                        popupText += '<li><table>';
+                        popupText += '<a><b>' + layer.get('popuplayertitle') + '</b></a>';
+                        popupText += createPopupField(currentFeature, currentFeatureKeys, layer);
+                        popupText += '</table></li>';    
+                    }
+                }
+            } else {
+                currentFeatureKeys = currentFeature.getKeys();
+                if (doPopup) {
+                    popupText += '<li><table>';
+                    popupText += '<a><b>' + layer.get('popuplayertitle') + '</b></a>';
+                    popupText += createPopupField(currentFeature, currentFeatureKeys, layer);
+                    popupText += '</table>';
+                }
+            }
         }
-
+    });
+    if (popupText === '<ul>') {
+        popupText = '';
     } else {
-        // DESKTOP: Original qgis2web click handler
-        map.forEachFeatureAtPixel(pixel, function(feature, layer) {
-            currentFeature = feature;
-            
-            var properties = feature.getProperties();
-            popupText = '<table>';
-            for (var key in properties) {
-                if (properties.hasOwnProperty(key) && key !== 'geometry') {
-                    popupText += '<tr><th>' + key + '</th><td>' + formatValue(properties[key]) + '</td></tr>';
-                }
-            }
-            popupText += '</table>';
-
-            return true;
-        });
-
-        if (currentFeature && popupText !== '<table></table>') {
-            container.style.display = 'block';
-            overlay.setPosition(coord);
-            content.innerHTML = popupText;
-        } else {
-            if (overlay) overlay.setPosition(undefined);
-            if (container) container.style.display = 'none';
-        }
+        popupText += '</ul>';
     }
+	
+	popupContent = popupText;
+    popupCoord = coord;
+    updatePopup();
 }
 
 function onSingleClickWMS(evt) {
