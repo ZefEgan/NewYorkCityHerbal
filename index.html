@@ -42,8 +42,8 @@
             padding: 0;
             margin: 0;
         }
-        
-  /* Filter Container Styles */
+ 
+  /* Desktop Filter Container Styles */
   #filter-container {
       position: absolute;
       top: 10px;
@@ -68,22 +68,34 @@
 
   /* Mobile Adjustments for Phones & Tablets (iPads) */
   @media only screen and (max-width: 1024px) {
-      /* Hide the + and - zoom controls on mobile/iPad */
+      /* Hide zoom + and - controls on mobile */
       .ol-zoom {
           display: none !important;
       }
 
+      /* Compact species filter in top right corner */
       #filter-container {
           top: 10px;
-          left: 10px;
           right: 10px;
+          left: auto;
+          max-width: 200px;
+          padding: 6px 10px;
           display: flex;
-          align-items: center;
-          justify-content: space-between;
+          flex-direction: column;
+          gap: 4px;
       }
+
       #speciesSelect {
-          max-width: 65%;
-          font-size: 16px; /* Prevents unwanted iOS auto-zoom on select */
+          width: 100%;
+          font-size: 14px;
+      }
+
+      /* Position Address Search control below top controls on mobile */
+      .ol-geocoder, 
+      .gcd-gl-control,
+      .ol-touch .ol-control.ol-geocoder {
+          top: 70px !important;
+          left: 10px !important;
       }
   }
         </style>
@@ -133,12 +145,12 @@ function initFilter() {
   var initialCenter = map.getView().getCenter();
   var initialZoom = map.getView().getZoom();
 
-  // Detect mobile device or touch capabilities (Phones, iPads, Android Tablets)
+  // Detect mobile device / touch interface
   var isTouchDevice = ('ontouchstart' in window) || 
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
-  // Touch tolerance: 15px on touch screens so finger taps hit points easily
+  // Set global hitTolerance so native qgis2web popups use 15px hit radius on mobile
   var clickHitTolerance = isTouchDevice ? 15 : 5;
 
   var speciesSet = new Set();
@@ -157,7 +169,7 @@ function initFilter() {
     selectElem.appendChild(opt);
   });
 
-  // Reusable filter & highlight function
+  // Reusable filter & highlight function (used by dropdown on both Desktop & Mobile)
   function filterBySpecies(selectedSpecies) {
     selectElem.value = selectedSpecies; // Keep dropdown UI in sync
 
@@ -207,42 +219,50 @@ function initFilter() {
     }
   }
 
-  // 1. Dropdown Change Listener
+  // 1. Dropdown Change Listener (Active on all devices)
   selectElem.addEventListener('change', function() {
     filterBySpecies(this.value);
   });
 
-  // 2. Map Single Click / Tap Listener
-  map.on('singleclick', function(evt) {
-    var clickedFeature = null;
+  // 2. Point Click Listener for Desktop & Mobile Popup Hit-Tolerance Enhancement
+  if (!isTouchDevice) {
+    // Desktop: Highlight species on point click + reset on background click
+    map.on('singleclick', function(evt) {
+      var clickedFeature = null;
 
-    // Detect feature at clicked pixel using hit tolerance for touch devices
-    map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
-      if (layer === plantLayer) {
-        clickedFeature = feature;
-        return true;
-      }
-    }, { hitTolerance: clickHitTolerance });
+      map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
+        if (layer === plantLayer) {
+          clickedFeature = feature;
+          return true;
+        }
+      });
 
-    if (clickedFeature) {
-      var species = clickedFeature.get(fieldName);
-      if (species) {
-        filterBySpecies(species);
+      if (clickedFeature) {
+        var species = clickedFeature.get(fieldName);
+        if (species) {
+          filterBySpecies(species);
+        }
+      } else {
+        filterBySpecies("");
       }
+    });
+  } else {
+    // Mobile: Intercept singleclick to provide 15px touch hit tolerance for qgis2web popup
+    map.on('singleclick', function(evt) {
+      var featureFound = false;
+      map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
+        if (layer === plantLayer) {
+          featureFound = true;
+          return true;
+        }
+      }, { hitTolerance: clickHitTolerance });
 
-      // Ensure qgis2web default popup displays for the clicked feature
-      if (typeof popup !== 'undefined' && typeof createPopup === 'function') {
-        createPopup(evt.coordinate, clickedFeature);
+      // If tapping background on mobile, clear dropdown selection
+      if (!featureFound) {
+        filterBySpecies("");
       }
-    } else {
-      // Clicked empty space: close popup and reset filter
-      if (typeof container !== 'undefined' && container) {
-        var overlay = map.getOverlayById ? map.getOverlayById('popup') : null;
-        if (overlay) overlay.setPosition(undefined);
-      }
-      filterBySpecies("");
-    }
-  });
+    });
+  }
 }
 
 // Ensure source data is loaded before reading features
