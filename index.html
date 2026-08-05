@@ -138,7 +138,7 @@ var highlightStyle = new ol.style.Style({
   })
 }); 
 
-var source = plantLayer.getSource();
+            var source = plantLayer.getSource();
 
 function initFilter() {
   var initialCenter = map.getView().getCenter();
@@ -214,7 +214,7 @@ function initFilter() {
 
   // 2. Click / Tap Listeners
   if (!isTouchDevice) {
-    // DESKTOP ONLY: Restrict click detection strictly to plantLayer
+    // DESKTOP ONLY: Click point highlights species; click empty space resets filter
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -232,8 +232,29 @@ function initFilter() {
         filterBySpecies("");
       }
     });
-  } 
-  // MOBILE: Do nothing here so qgis2web's native listener handles singleclick natively.
+  } else {
+    // MOBILE ONLY: Tap empty map space resets filter ONLY if a species is currently selected
+    map.on('singleclick', function(evt) {
+      // Disabled when "Show All" is active
+      if (selectElem.value === "") {
+        return;
+      }
+
+      var hitPlant = false;
+
+      map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
+        if (layer === plantLayer) {
+          hitPlant = true;
+          return true;
+        }
+      });
+
+      // Tapped empty space while a species was active: reset filter
+      if (!hitPlant) {
+        filterBySpecies("");
+      }
+    });
+  }
 }
 
 if (source.getState() === 'ready') {
