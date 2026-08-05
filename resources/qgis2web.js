@@ -370,8 +370,15 @@ function onSingleClickFeatures(evt) {
                    (navigator.maxTouchPoints > 0) || 
                    (window.innerWidth <= 1024);
 
+    // Helper to safely format cell content without breaking on Autolinker
+    function formatValue(val) {
+        if (val === null || val === undefined) return '';
+        var str = String(val);
+        return (typeof Autolinker !== 'undefined' && Autolinker.link) ? Autolinker.link(str) : str;
+    }
+
     if (isMobile) {
-        // MOBILE: Apply 15px touch buffer and filter strictly for IllustratedHerbal_6
+        // MOBILE ONLY: Apply 15px touch buffer and filter strictly for IllustratedHerbal
         map.forEachFeatureAtPixel(pixel, function(feature, layer) {
             if (!layer) return false;
 
@@ -379,12 +386,12 @@ function onSingleClickFeatures(evt) {
             var title = String(layer.get('title') || '');
             var name = String(layer.get('name') || '');
 
-            // Match 'IllustratedHerbal_6' or 'IllustratedHerbal' case-insensitively
-            var isHerbalLayer = title.toLowerCase().includes('illustratedherbal') || 
-                                name.toLowerCase().includes('illustratedherbal');
+            // Match IllustratedHerbal_6 layer title or name
+            var isHerbalLayer = title.toLowerCase().indexOf('illustratedherbal') !== -1 || 
+                                name.toLowerCase().indexOf('illustratedherbal') !== -1;
 
             if (!isHerbalLayer) {
-                return false; // Skip non-target layers (borough outlines, basemaps, etc.)
+                return false; // Skip background polygons, borough maps, parks, etc.
             }
 
             currentFeature = feature;
@@ -393,14 +400,12 @@ function onSingleClickFeatures(evt) {
             popupText = '<table>';
             for (var key in properties) {
                 if (properties.hasOwnProperty(key) && key !== 'geometry') {
-                    popupText += '<tr><th>' + key + '</th><td>' + 
-                        (properties[key] !== null ? Autolinker.link(properties[key].toLocaleString()) : '') + 
-                        '</td></tr>';
+                    popupText += '<tr><th>' + key + '</th><td>' + formatValue(properties[key]) + '</td></tr>';
                 }
             }
             popupText += '</table>';
 
-            return true; // Stop feature iteration once the botanical point is hit
+            return true; // Stop searching once plant feature is hit
         }, {
             hitTolerance: 15
         });
@@ -415,7 +420,7 @@ function onSingleClickFeatures(evt) {
         }
 
     } else {
-        // DESKTOP: Unfiltered default qgis2web click handler with standard pixel tolerance
+        // DESKTOP: Original qgis2web click handler
         map.forEachFeatureAtPixel(pixel, function(feature, layer) {
             currentFeature = feature;
             
@@ -423,9 +428,7 @@ function onSingleClickFeatures(evt) {
             popupText = '<table>';
             for (var key in properties) {
                 if (properties.hasOwnProperty(key) && key !== 'geometry') {
-                    popupText += '<tr><th>' + key + '</th><td>' + 
-                        (properties[key] !== null ? Autolinker.link(properties[key].toLocaleString()) : '') + 
-                        '</td></tr>';
+                    popupText += '<tr><th>' + key + '</th><td>' + formatValue(properties[key]) + '</td></tr>';
                 }
             }
             popupText += '</table>';
