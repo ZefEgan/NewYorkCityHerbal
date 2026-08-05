@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="./resources/ol.css">
+        <link rel="stylesheet" href="resources/fontawesome-all.min.css">
+        <link href="resources/photon-geocoder-autocomplete.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="./resources/ol-layerswitcher.css">
+        <link rel="stylesheet" href="./resources/qgis2web.css">
+        <style>
+        html, body {
+            background-color: #d0e1f9;
+        }
+        .ol-control > * {
+            background-color: #f8f8f8!important;
+            color: #7ca89d!important;
+            border-radius: 0px;
+        }
+        .ol-attribution a, .gcd-gl-input::placeholder, .search-layer-input-search::placeholder {
+            color: #7ca89d!important;
+        }
+        .search-layer-input-search {
+            background-color: #f8f8f8!important;
+        }
+        .ol-control > *:focus, .ol-control >*:hover {
+            background-color: rgba(248, 248, 248, 0.7)!important;
+        } 
+        .ol-control {
+            background-color: rgba(255,255,255,.4) !important;
+            padding: 2px !important;
+        } 
+        </style>
+
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title></title>
+    </head>
+    <body>
+      <div id="filter-container" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; padding: 8px; border-radius: 4px; box-shadow: 0 0 5px rgba(0,0,0,0.3);">
+        <label for="speciesSelect" style="color: #7ca89d;"><strong>Search Species:</strong></label>
+        <select id="speciesSelect">
+          <option value="">-- Show All --</option>
+        </select>
+    </div>
+        <div id="map">
+            <div id="popup" class="ol-popup">
+                <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+                <div id="popup-content"></div>
+            </div>
+        </div>
+        <script src="resources/qgis2web_expressions.js"></script>
+        <script src="./resources/functions.js"></script>
+        <script src="./resources/ol.js"></script>
+        <script src="./resources/ol-layerswitcher.js"></script>
+        <script src="resources/photon-geocoder-autocomplete.min.js"></script>
+        <script src="resources/olms.js"></script>
+        <script src="layers/Boroughs_0.js"></script><script src="layers/Cemeteries_1.js"></script><script src="layers/ProspectPark_2.js"></script><script src="layers/Parks_3.js"></script><script src="layers/MajorRoads_4.js"></script><script src="layers/WaterFeature_5.js"></script><script src="layers/IllustratedHerbal_6.js"></script>
+        <script src="styles/Boroughs_0_style.js"></script><script src="styles/Cemeteries_1_style.js"></script><script src="styles/ProspectPark_2_style.js"></script><script src="styles/Parks_3_style.js"></script><script src="styles/MajorRoads_4_style.js"></script><script src="styles/WaterFeature_5_style.js"></script><script src="styles/IllustratedHerbal_6_style.js"></script>
+        <script src="./layers/layers.js" type="text/javascript"></script> 
+        <script src="./resources/Autolinker.min.js"></script>
+        <script src="./resources/qgis2web.js"></script>
+        <script>
+            // Reference the OpenLayers layer variable created inside layers.js
+            var plantLayer = lyr_IllustratedHerbal_6; 
+            var fieldName = 'scientific';
+
+// Highlight style: radius 4.8, #7ca89d fill, no stroke outline
+var highlightStyle = new ol.style.Style({
+  image: new ol.style.Circle({
+    radius: 4.8,
+    fill: new ol.style.Fill({ color: '#7ca89d' })
+  })
+}); 
+
+var source = plantLayer.getSource();
+
+function initFilter() {
+  // Capture initial view center and zoom level on page load
+  var initialCenter = map.getView().getCenter();
+  var initialZoom = map.getView().getZoom();
+
+  var speciesSet = new Set();
+
+  // Populate dropdown options with unique species names
+  source.forEachFeature(function(feature) {
+    var val = feature.get(fieldName);
+    if (val) speciesSet.add(val);
+  });
+
+  var selectElem = document.getElementById('speciesSelect');
+  Array.from(speciesSet).sort().forEach(function(species) {
+    var opt = document.createElement('option');
+    opt.value = species;
+    opt.innerHTML = species;
+    selectElem.appendChild(opt);
+  });
+
+  // Reusable filter & highlight function
+  function filterBySpecies(selectedSpecies) {
+    selectElem.value = selectedSpecies; // Keep dropdown UI in sync
+
+    var extent = ol.extent.createEmpty();
+    var matchCount = 0;
+
+    source.forEachFeature(function(feature) {
+      if (selectedSpecies === "" || feature.get(fieldName) === selectedSpecies) {
+        if (selectedSpecies !== "") {
+          feature.setStyle(highlightStyle);
+          ol.extent.extend(extent, feature.getGeometry().getExtent());
+          matchCount++;
+        } else {
+          feature.setStyle(null); // Reset to default style when "-- Show All --" is selected
+        }
+      } else {
+        feature.setStyle(new ol.style.Style(null)); // Hide non-matches
+      }
+    });
+
+    if (matchCount > 0) {
+      var view = map.getView();
+      var size = map.getSize();
+      
+      // 1. Calculate the resolution needed to fit all points
+      var targetResolution = view.getResolutionForExtent(extent, size);
+      
+      // 2. Convert resolution to a zoom level
+      var targetZoom = view.getZoomForResolution(targetResolution);
+      
+      // 3. Cap the zoom level: zoom in if features are close, but NEVER zoom out past initialZoom
+      // Subtracting a small padding offset so points near edges aren't cut off
+      var cappedZoom = Math.min(Math.max(targetZoom - 0.5, 0), 16);
+      cappedZoom = Math.max(cappedZoom, initialZoom);
+
+      var center = ol.extent.getCenter(extent);
+
+      view.animate({
+        center: center,
+        zoom: cappedZoom,
+        duration: 300
+      });
+
+    } else if (selectedSpecies === "") {
+      // Reset view back to exact initial center and zoom level
+      map.getView().animate({
+        center: initialCenter,
+        zoom: initialZoom,
+        duration: 300
+      });
+    }
+  }
+
+  // 1. Dropdown Change Listener
+  selectElem.addEventListener('change', function() {
+    filterBySpecies(this.value);
+  });
+
+  // 2. Map Point / Background Click Listener
+  map.on('singleclick', function(evt) {
+    var clickedFeature = null;
+
+    map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
+      if (layer === plantLayer) {
+        clickedFeature = feature;
+        return true;
+      }
+    });
+
+    if (clickedFeature) {
+      // Clicked a plant feature: highlight all instances of that species
+      var species = clickedFeature.get(fieldName);
+      if (species) {
+        filterBySpecies(species);
+      }
+    } else {
+      // Clicked empty space on map: reset filter and view back to initial state
+      filterBySpecies("");
+    }
+  });
+}
+
+// Ensure source data is loaded before reading features
+if (source.getState() === 'ready') {
+  initFilter();
+} else {
+  source.once('change', function() {
+    if (source.getState() === 'ready') {
+      initFilter();
+    }
+  });
+}
+        </script>        
+    </body>
+</html>
