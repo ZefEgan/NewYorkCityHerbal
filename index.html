@@ -137,13 +137,32 @@
       var plantLayer = lyr_IllustratedHerbal_6; 
       var fieldName = 'scientific';
 
-// Highlights: radius 4.8, #7ca89d fill, no stroke
-var highlightStyle = new ol.style.Style({
-  image: new ol.style.Circle({
-    radius: 4.8,
-    fill: new ol.style.Fill({ color: '#7ca89d' })
-  })
-}); 
+// Dynamic highlight style function: calculates radius on zoom/render frame
+            function highlightStyle(feature, resolution) {
+                var pointRadius = 2; // Default starting size
+
+                if (resolution < 0.5) {        // Zoomed in extremely close
+                    pointRadius = 22;
+                } else if (resolution < 1.2) { // Zoomed in very close
+                    pointRadius = 16;
+                } else if (resolution < 2.5) { // Medium close zoom
+                    pointRadius = 10;
+                } else if (resolution < 5) {   // Medium zoom
+                    pointRadius = 6;
+                } else if (resolution < 10) {  // Zooming out
+                    pointRadius = 4;
+                } else {                       // Fully zoomed out
+                    pointRadius = 4;
+                }
+
+                return new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: pointRadius,
+                        stroke: null, // No border around highlight
+                        fill: new ol.style.Fill({ color: '#7ca89d' })
+                    })
+                });
+            }
 
             var source = plantLayer.getSource();
 
