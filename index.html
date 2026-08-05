@@ -141,21 +141,18 @@ var highlightStyle = new ol.style.Style({
 var source = plantLayer.getSource();
 
 function initFilter() {
-  // Capture initial view center and zoom level on page load
   var initialCenter = map.getView().getCenter();
   var initialZoom = map.getView().getZoom();
 
-  // Detect mobile device / touch interface
   var isTouchDevice = ('ontouchstart' in window) || 
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
-  // Maximum touch radius in SCREEN PIXELS for mobile tapping
-  var MAX_TOUCH_DISTANCE_PX = 50; 
+  // Expanded touch target for mobile (80px radius around any tap)
+  var MOBILE_TOUCH_RADIUS_PX = 80; 
 
   var speciesSet = new Set();
 
-  // Populate dropdown options with unique species names
   source.forEachFeature(function(feature) {
     var val = feature.get(fieldName);
     if (val) speciesSet.add(val);
@@ -169,9 +166,8 @@ function initFilter() {
     selectElem.appendChild(opt);
   });
 
-  // Reusable filter & highlight function
   function filterBySpecies(selectedSpecies) {
-    selectElem.value = selectedSpecies; // Keep dropdown UI in sync
+    selectElem.value = selectedSpecies;
 
     var extent = ol.extent.createEmpty();
     var matchCount = 0;
@@ -183,34 +179,28 @@ function initFilter() {
           ol.extent.extend(extent, feature.getGeometry().getExtent());
           matchCount++;
         } else {
-          feature.setStyle(null); // Reset to base qgis2web style
+          feature.setStyle(null);
         }
       } else {
-        feature.setStyle(new ol.style.Style(null)); // Hide non-matches
+        feature.setStyle(new ol.style.Style(null));
       }
     });
 
     if (matchCount > 0) {
       var view = map.getView();
       var size = map.getSize();
-      
       var targetResolution = view.getResolutionForExtent(extent, size);
       var targetZoom = view.getZoomForResolution(targetResolution);
       
-      // Calculate capped zoom level (never zoom out farther than initialZoom)
       var cappedZoom = Math.min(Math.max(targetZoom - 0.5, 0), 16);
       cappedZoom = Math.max(cappedZoom, initialZoom);
 
-      var center = ol.extent.getCenter(extent);
-
       view.animate({
-        center: center,
+        center: ol.extent.getCenter(extent),
         zoom: cappedZoom,
         duration: 300
       });
-
     } else if (selectedSpecies === "") {
-      // Reset view back to exact initial center and zoom level
       map.getView().animate({
         center: initialCenter,
         zoom: initialZoom,
@@ -219,42 +209,39 @@ function initFilter() {
     }
   }
 
-  // MOBILE-ONLY: Map coordinate distance search that works perfectly at ANY zoom level
-  function getNearestPlantFeatureOnMobile(clickCoordinate, maxAllowedPx) {
-    var nearestFeature = null;
-    var view = map.getView();
-    
-    // Get current map resolution (map units per screen pixel at CURRENT zoom)
-    var resolution = view.getResolution(); 
-    
-    // Convert 50 screen pixels into map coordinate distance
-    var maxAllowedMapDistance = maxAllowedPx * resolution;
-    var minDistanceSq = maxAllowedMapDistance * maxAllowedMapDistance;
+  // Simplified Mobile Search: Strictly scans plant features and checks pixel distance on tap
+  function getClosestPlantOnMobile(tapPixel) {
+    var closestFeature = null;
+    var minPixelDistSq = MOBILE_TOUCH_RADIUS_PX * MOBILE_TOUCH_RADIUS_PX;
 
-    var clickX = clickCoordinate[0];
-    var clickY = clickCoordinate[1];
+    // Scan ONLY plant features in the source
+    var features = source.getFeatures();
+    
+    for (var i = 0; i < features.length; i++) {
+      var feature = features[i];
 
-    source.forEachFeature(function(feature) {
-      // Skip hidden features from species filter
+      // Skip hidden points when filtered
       if (feature.getStyle() && feature.getStyle().getImage() === null) {
-        return;
+        continue;
       }
 
       var geom = feature.getGeometry();
-      if (geom) {
-        var coord = geom.getCoordinates();
-        var dx = coord[0] - clickX;
-        var dy = coord[1] - clickY;
-        var distSq = dx * dx + dy * dy;
+      if (!geom) continue;
 
-        if (distSq < minDistanceSq) {
-          minDistanceSq = distSq;
-          nearestFeature = feature;
-        }
+      var pointPixel = map.getPixelFromCoordinate(geom.getCoordinates());
+      if (!pointPixel) continue; // Skip points outside rendering range
+
+      var dx = pointPixel[0] - tapPixel[0];
+      var dy = pointPixel[1] - tapPixel[1];
+      var distSq = dx * dx + dy * dy;
+
+      if (distSq < minPixelDistSq) {
+        minPixelDistSq = distSq;
+        closestFeature = feature;
       }
-    });
+    }
 
-    return nearestFeature;
+    return closestFeature;
   }
 
   // 1. Dropdown Change Listener
@@ -262,9 +249,9 @@ function initFilter() {
     filterBySpecies(this.value);
   });
 
-  // 2. Map Tap / Click Listener
+  // 2. Click / Tap Listeners
   if (!isTouchDevice) {
-    // DESKTOP: Standard pixel detection
+    // DESKTOP: Standard exact feature hit detection
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -277,29 +264,26 @@ function initFilter() {
 
       if (clickedFeature) {
         var species = clickedFeature.get(fieldName);
-        if (species) {
-          filterBySpecies(species);
-        }
+        if (species) filterBySpecies(species);
       } else {
         filterBySpecies("");
       }
     });
   } else {
-    // MOBILE ONLY: Tap detection using map coordinates & current zoom resolution
+    // MOBILE ONLY: Ultra-sensitive nearest plant snap, ignoring all other layers
     map.on('singleclick', function(evt) {
-      // Force viewport size update to prevent post-zoom pinch matrix drift
-      map.updateSize();
+      map.updateSize(); // Refresh canvas bounds on tap
 
-      var nearestFeature = getNearestPlantFeatureOnMobile(evt.coordinate, MAX_TOUCH_DISTANCE_PX);
+      var nearestPlant = getClosestPlantOnMobile(evt.pixel);
 
-      if (nearestFeature) {
-        // Trigger qgis2web default popup at feature location
+      if (nearestPlant) {
+        // Trigger popup for nearest plant
         if (typeof createPopup === 'function') {
-          var featureCoord = nearestFeature.getGeometry().getCoordinates();
-          createPopup(featureCoord, nearestFeature);
+          var featureCoord = nearestPlant.getGeometry().getCoordinates();
+          createPopup(featureCoord, nearestPlant);
         }
       } else {
-        // Clear popup and reset filter when tapping empty space
+        // Close popup and reset filter if tap is far away from all plant points
         if (typeof container !== 'undefined' && container) {
           var overlay = map.getOverlayById ? map.getOverlayById('popup') : null;
           if (overlay) overlay.setPosition(undefined);
@@ -310,7 +294,6 @@ function initFilter() {
   }
 }
 
-// Ensure source data is loaded before reading features
 if (source.getState() === 'ready') {
   initFilter();
 } else {
