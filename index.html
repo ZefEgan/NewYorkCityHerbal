@@ -126,9 +126,9 @@
         <script src="./resources/Autolinker.min.js"></script>
         <script src="./resources/qgis2web.js"></script>
         <script>
-            // Reference the OpenLayers layer variable created inside layers.js
-            var plantLayer = lyr_IllustratedHerbal_6; 
-            var fieldName = 'scientific';
+// Reference the OpenLayers layer variable created inside layers.js
+      var plantLayer = lyr_IllustratedHerbal_6; 
+      var fieldName = 'scientific';
 
 // Highlight style: radius 4.8, #7ca89d fill, no stroke
 var highlightStyle = new ol.style.Style({
@@ -150,6 +150,9 @@ function initFilter() {
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
+  // Maximum touch radius in pixels for nearest-point snapping on mobile
+  var MAX_TOUCH_DISTANCE_PX = 35; 
+
   var speciesSet = new Set();
 
   // Populate dropdown options with unique species names
@@ -166,7 +169,7 @@ function initFilter() {
     selectElem.appendChild(opt);
   });
 
-  // Reusable filter & highlight function (used by dropdown on both Desktop & Mobile)
+  // Reusable filter & highlight function
   function filterBySpecies(selectedSpecies) {
     selectElem.value = selectedSpecies; // Keep dropdown UI in sync
 
@@ -216,13 +219,41 @@ function initFilter() {
     }
   }
 
-  // 1. Dropdown Change Listener (Active on all devices)
+  // Helper function: find closest feature within a pixel radius
+  function getNearestFeatureAtPixel(pixel, maxDistancePx) {
+    var nearestFeature = null;
+    var minDistanceSq = maxDistancePx * maxDistancePx;
+
+    source.forEachFeature(function(feature) {
+      var geom = feature.getGeometry();
+      if (geom) {
+        var coord = geom.getCoordinates();
+        var featurePixel = map.getPixelFromCoordinate(coord);
+        
+        if (featurePixel) {
+          var dx = featurePixel[0] - pixel[0];
+          var dy = featurePixel[1] - pixel[1];
+          var distSq = dx * dx + dy * dy;
+
+          if (distSq < minDistanceSq) {
+            minDistanceSq = distSq;
+            nearestFeature = feature;
+          }
+        }
+      }
+    });
+
+    return nearestFeature;
+  }
+
+  // 1. Dropdown Change Listener
   selectElem.addEventListener('change', function() {
     filterBySpecies(this.value);
   });
 
-  // 2. Point Click Listener (ONLY on Desktop to preserve 100% native popup behavior on mobile)
+  // 2. Map Tap / Click Listener
   if (!isTouchDevice) {
+    // Desktop: Click point to highlight species + reset on background click
     map.on('singleclick', function(evt) {
       var clickedFeature = null;
 
@@ -239,7 +270,26 @@ function initFilter() {
           filterBySpecies(species);
         }
       } else {
-        // Reset filter and view when clicking map background
+        filterBySpecies("");
+      }
+    });
+  } else {
+    // Mobile: Nearest-neighbor search within 35px radius for instant, hyper-sensitive selection
+    map.on('singleclick', function(evt) {
+      var nearestFeature = getNearestFeatureAtPixel(evt.pixel, MAX_TOUCH_DISTANCE_PX);
+
+      if (nearestFeature) {
+        // Trigger qgis2web default popup at feature location
+        if (typeof createPopup === 'function') {
+          var featureCoord = nearestFeature.getGeometry().getCoordinates();
+          createPopup(featureCoord, nearestFeature);
+        }
+      } else {
+        // Clear selection if tap is far away from all points
+        if (typeof container !== 'undefined' && container) {
+          var overlay = map.getOverlayById ? map.getOverlayById('popup') : null;
+          if (overlay) overlay.setPosition(undefined);
+        }
         filterBySpecies("");
       }
     });
