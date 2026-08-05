@@ -66,8 +66,13 @@
       background-color: #fff;
   }
 
-  /* Mobile Adjustments for Phones & Tablets */
-  @media only screen and (max-width: 768px) {
+  /* Mobile Adjustments for Phones & Tablets (iPads) */
+  @media only screen and (max-width: 1024px) {
+      /* Hide the + and - zoom controls on mobile/iPad */
+      .ol-zoom {
+          display: none !important;
+      }
+
       #filter-container {
           top: 10px;
           left: 10px;
@@ -78,10 +83,9 @@
       }
       #speciesSelect {
           max-width: 65%;
-          font-size: 16px; /* Prevents auto-zoom on iOS inputs */
+          font-size: 16px; /* Prevents unwanted iOS auto-zoom on select */
       }
   }
-
         </style>
         <title></title>
     </head>
@@ -134,7 +138,7 @@ function initFilter() {
                       (navigator.maxTouchPoints > 0) || 
                       (window.innerWidth <= 1024);
 
-  // Increase hit tolerance for touch devices so finger taps hit small points easily
+  // Touch tolerance: 15px on touch screens so finger taps hit points easily
   var clickHitTolerance = isTouchDevice ? 15 : 5;
 
   var speciesSet = new Set();
@@ -181,9 +185,8 @@ function initFilter() {
       var targetResolution = view.getResolutionForExtent(extent, size);
       var targetZoom = view.getZoomForResolution(targetResolution);
       
-      // Calculate capped zoom level
+      // Calculate capped zoom level (never zoom out farther than initialZoom)
       var cappedZoom = Math.min(Math.max(targetZoom - 0.5, 0), 16);
-      // Strictly enforce that zoom level never drops below initialZoom
       cappedZoom = Math.max(cappedZoom, initialZoom);
 
       var center = ol.extent.getCenter(extent);
@@ -209,11 +212,11 @@ function initFilter() {
     filterBySpecies(this.value);
   });
 
-  // 2. Touch/Click Listener with Hit Tolerance
+  // 2. Map Single Click / Tap Listener
   map.on('singleclick', function(evt) {
     var clickedFeature = null;
 
-    // hitTolerance allows finger taps near a point to register on mobile
+    // Detect feature at clicked pixel using hit tolerance for touch devices
     map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
       if (layer === plantLayer) {
         clickedFeature = feature;
@@ -222,13 +225,21 @@ function initFilter() {
     }, { hitTolerance: clickHitTolerance });
 
     if (clickedFeature) {
-      // Clicked/Tapped a plant feature: highlight all instances of that species
       var species = clickedFeature.get(fieldName);
       if (species) {
         filterBySpecies(species);
       }
+
+      // Ensure qgis2web default popup displays for the clicked feature
+      if (typeof popup !== 'undefined' && typeof createPopup === 'function') {
+        createPopup(evt.coordinate, clickedFeature);
+      }
     } else {
-      // Clicked/Tapped empty space: reset filter and view back to initial state
+      // Clicked empty space: close popup and reset filter
+      if (typeof container !== 'undefined' && container) {
+        var overlay = map.getOverlayById ? map.getOverlayById('popup') : null;
+        if (overlay) overlay.setPosition(undefined);
+      }
       filterBySpecies("");
     }
   });
